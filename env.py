@@ -132,6 +132,17 @@ class DataCleaningEnv:
 
     def state(self) -> Dict[str, Any]:
         """Return serializable snapshot of current environment state."""
+        import math
+        def safe_dict(d):
+            """Recursively replace NaN/Inf with None for JSON safety."""
+            if isinstance(d, dict):
+                return {k: safe_dict(v) for k, v in d.items()}
+            elif isinstance(d, float) and (math.isnan(d) or math.isinf(d)):
+                return None
+            elif isinstance(d, list):
+                return [safe_dict(i) for i in d]
+            return d
+
         return {
             "task_id": self.task_id,
             "difficulty": self.task["difficulty"],
@@ -139,7 +150,7 @@ class DataCleaningEnv:
             "max_steps": self.task["max_steps"],
             "done": self._done,
             "current_reward": self._grade() if self._df is not None else 0.0,
-            "dataframe": self._df.to_dict() if self._df is not None else {},
+            "dataframe": safe_dict(self._df.where(self._df.notna(), None).to_dict()) if self._df is not None else {},
         }
 
     # ── Internal helpers ─────────────────────────
