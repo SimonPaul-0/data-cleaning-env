@@ -1,0 +1,154 @@
+name: data-cleaning-env
+version: "1.0.0"
+description: >
+  A real-world OpenEnv environment where an AI agent cleans messy CSV datasets.
+  The agent receives a dirty DataFrame and must issue structured cleaning actions
+  to fix nulls, wrong types, duplicates, and inconsistent formats.
+author: BOTSQUAD
+tags:
+  - data-cleaning
+  - real-world
+  - openenv
+  - tabular
+
+observation_space:
+  type: object
+  properties:
+    task_id:
+      type: string
+      description: Identifier of the active task
+    task_description:
+      type: string
+      description: Natural language description of what needs to be cleaned
+    difficulty:
+      type: string
+      enum: [easy, medium, hard]
+    dataframe_json:
+      type: string
+      description: Current DataFrame serialized as JSON (up to 20 rows)
+    columns:
+      type: array
+      items:
+        type: string
+    shape:
+      type: array
+      items:
+        type: integer
+      description: "[rows, cols] of the current DataFrame"
+    null_counts:
+      type: object
+      description: Per-column null counts
+    step:
+      type: integer
+    max_steps:
+      type: integer
+    last_action_result:
+      type: string
+      description: Human-readable result of the last action
+    done:
+      type: boolean
+
+action_space:
+  type: object
+  required: [action_type]
+  properties:
+    action_type:
+      type: string
+      enum: [fix_null, fix_dtype, deduplicate, standardize, drop_column, replace_value, noop]
+    column:
+      type: string
+      nullable: true
+    strategy:
+      type: string
+      nullable: true
+      description: "For fix_null: mean | median | mode | drop | value"
+    value:
+      type: string
+      nullable: true
+      description: "For fix_null (strategy=value): fill value. For replace_value: old value."
+    new_value:
+      type: string
+      nullable: true
+      description: "For replace_value: new value"
+    dtype:
+      type: string
+      nullable: true
+      description: "For fix_dtype: int | float | str"
+    fmt:
+      type: string
+      nullable: true
+      description: "For standardize: date | phone | lowercase | uppercase"
+
+reward:
+  type: float
+  range: [0.0, 1.0]
+  description: >
+    Partial progress reward computed deterministically by comparing
+    the current DataFrame to ground-truth quality criteria.
+    1.0 = perfectly cleaned dataset. Reward increases monotonically
+    with each correctly applied cleaning action.
+
+tasks:
+  - id: easy
+    difficulty: easy
+    description: Fix nulls and data type errors in an employee CSV
+    max_steps: 20
+    scoring:
+      - criterion: No nulls remain
+        weight: 0.50
+      - criterion: age column is numeric
+        weight: 0.25
+      - criterion: salary column is numeric
+        weight: 0.25
+
+  - id: medium
+    difficulty: medium
+    description: Deduplicate records and standardize phone, date, email formats
+    max_steps: 20
+    scoring:
+      - criterion: Duplicate rows removed (8 rows remaining)
+        weight: 0.25
+      - criterion: Phone numbers have ≥10 extractable digits
+        weight: 0.25
+      - criterion: Dates in YYYY-MM-DD format
+        weight: 0.25
+      - criterion: Emails all lowercase
+        weight: 0.25
+
+  - id: hard
+    difficulty: hard
+    description: Resolve conflicts from two merged data sources
+    max_steps: 25
+    scoring:
+      - criterion: Exactly 6 unique customer_ids
+        weight: 0.40
+      - criterion: No duplicate customer_ids
+        weight: 0.30
+      - criterion: City 'LA' normalized to 'Los Angeles'
+        weight: 0.15
+      - criterion: Name 'Robert Wilson' resolved to 'Bob Wilson'
+        weight: 0.15
+
+endpoints:
+  reset:
+    method: POST
+    path: /reset
+    body:
+      task_id: string
+  step:
+    method: POST
+    path: /step
+    body:
+      task_id: string
+      action: object
+  state:
+    method: GET
+    path: /state
+    params:
+      task_id: string
+
+infrastructure:
+  runtime: python3.11
+  memory: 2gb
+  vcpu: 1
+  inference_timeout_minutes: 20
