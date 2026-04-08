@@ -8,7 +8,6 @@ GET  /health  → 200 OK
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
 from env import DataCleaningEnv, Action, Observation, StepResult
 from tasks import TASKS
 
@@ -41,7 +40,10 @@ def health():
 
 
 @app.post("/reset", response_model=Observation)
-def reset(req: ResetRequest):
+def reset(req: Optional[ResetRequest] = None):
+    # OpenEnv checker sometimes sends empty/null body — default to "easy"
+    if req is None:
+        req = ResetRequest()
     if req.task_id not in TASKS:
         raise HTTPException(status_code=400, detail=f"Unknown task_id '{req.task_id}'")
     env = DataCleaningEnv(task_id=req.task_id)
@@ -52,7 +54,6 @@ def reset(req: ResetRequest):
 @app.post("/step", response_model=StepResult)
 def step(req: StepRequest):
     if req.task_id not in _envs:
-        # Auto-reset if no env exists
         env = DataCleaningEnv(task_id=req.task_id)
         env.reset()
         _envs[req.task_id] = env
