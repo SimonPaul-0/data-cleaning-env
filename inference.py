@@ -79,30 +79,25 @@ Issue your next cleaning action as JSON.
         raw = raw.replace("```json", "").replace("```", "").strip()
         return json.loads(raw)
     except Exception as exc:
-        print(f"  [model error] {exc} → using noop")
+        print(f"  [model error] {exc} → using noop", flush=True)
         return {"action_type": "noop"}
 
 
 def run_task(client: OpenAI, task_id: str) -> float:
-    print(f"\n{'='*55}")
-    print(f"  TASK: {task_id.upper()}")
-    print(f"{'='*55}")
+    print(f"[START] task={task_id}", flush=True)
 
-    # Reset
     resp = requests.post(f"{ENV_URL}/reset", json={"task_id": task_id}, timeout=30)
     resp.raise_for_status()
     obs = resp.json()
-    print(f"  Goal: {obs['task_description'][:120]}...")
 
     final_reward = 0.0
+    step_num = 0
 
     for step_num in range(1, MAX_STEPS + 1):
         if obs.get("done"):
-            print(f"  Done at step {step_num - 1}.")
             break
 
         action = get_action(client, obs)
-        print(f"  Step {step_num}: {action}")
 
         resp = requests.post(
             f"{ENV_URL}/step",
@@ -115,18 +110,14 @@ def run_task(client: OpenAI, task_id: str) -> float:
         obs = result["observation"]
         reward = result["reward"]
         done = result["done"]
-        action_result = result["info"].get("action_result", "")
 
-        print(f"    → reward: {reward:.4f} | done: {done} | {action_result}")
+        print(f"[STEP] step={step_num} reward={reward:.4f}", flush=True)
         final_reward = reward
 
         if done:
-            print(f"  Episode complete.")
             break
-    else:
-        print(f"  Reached max steps ({MAX_STEPS}).")
 
-    print(f"  Final reward [{task_id}]: {final_reward:.4f}")
+    print(f"[END] task={task_id} score={final_reward:.4f} steps={step_num}", flush=True)
     return final_reward
 
 
@@ -138,18 +129,11 @@ def main() -> None:
         try:
             scores[task_id] = run_task(client, task_id)
         except Exception as exc:
-            print(f"  [task error] {task_id}: {exc}")
+            print(f"  [task error] {task_id}: {exc}", flush=True)
             scores[task_id] = 0.0
 
-    print(f"\n{'='*55}")
-    print("  BASELINE SCORES")
-    print(f"{'='*55}")
-    for tid, score in scores.items():
-        bar = "█" * int(score * 20)
-        print(f"  {tid:8s}: {score:.4f}  {bar}")
     avg = sum(scores.values()) / len(scores)
-    print(f"  {'Average':8s}: {avg:.4f}")
-    print(f"{'='*55}")
+    print(f"\nFinal average score: {avg:.4f}", flush=True)
 
 
 if __name__ == "__main__":
